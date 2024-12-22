@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "transpose"
+version = "0.1.0"
+description = ""
+authors = ["sage-hyun <dan06052@naver.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+onnx = "^1.17.0"
+onnxruntime = "^1.20.1"
+torch = "2.5.1"
+opencv-python = "4.10.0.84"
+pygame = "2.6.1"
+scipy = "1.11.4"
+chumpy = {path = "C:/Users/sage/SynologyDrive/dev/transpose_livestream/model/TransPose/chumpy/dist/chumpy-0.71-py3-none-any.whl"}
+onnxsim = "^0.4.36"
+numpy = "1.26.4"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
