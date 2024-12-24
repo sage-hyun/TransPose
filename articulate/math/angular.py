@@ -158,10 +158,29 @@ def rotation_matrix_to_axis_angle(r: torch.Tensor):
     :param r: Rotation matrix tensor that can reshape to [batch_size, 3, 3].
     :return: Axis-angle tensor of shape [batch_size, 3].
     """
-    import cv2
-    result = [cv2.Rodrigues(_)[0] for _ in r.clone().detach().cpu().view(-1, 3, 3).numpy()]
-    result = torch.from_numpy(np.stack(result)).float().squeeze(-1).to(r.device)
-    return result
+    # import cv2
+    # result = [cv2.Rodrigues(_)[0] for _ in r.clone().detach().cpu().view(-1, 3, 3).numpy()]
+    # result = torch.from_numpy(np.stack(result)).float().squeeze(-1).to(r.device)
+    # return result
+
+    # Ensure r has shape [batch_size, 3, 3]
+    r = r.view(-1, 3, 3)
+    
+    # Calculate the angle
+    cos_theta = (r[:, 0, 0] + r[:, 1, 1] + r[:, 2, 2] - 1) / 2
+    theta = torch.acos(torch.clamp(cos_theta, -1, 1))
+    
+    # Calculate the axis
+    sin_theta = torch.sqrt(1 - cos_theta**2 + 1e-6)  # Add small value for numerical stability
+    axis = torch.stack([
+        (r[:, 2, 1] - r[:, 1, 2]),
+        (r[:, 0, 2] - r[:, 2, 0]),
+        (r[:, 1, 0] - r[:, 0, 1]),
+    ], dim=-1) / (2 * sin_theta.unsqueeze(-1) + 1e-6)
+    
+    # Combine axis and angle
+    axis_angle = axis * theta.unsqueeze(-1)
+    return axis_angle
 
 
 def r6d_to_rotation_matrix(r6d: torch.Tensor):
