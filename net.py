@@ -80,11 +80,12 @@ class TransPoseNet(torch.nn.Module):
         self.prob_threshold = prob_threshold
         self.gravity_velocity = torch.tensor([0, gravity_velocity, 0])
         self.feet_pos = j[10:12].clone()
-        self.floor_y = j[10:12, 1].min().item() # get min y-coordinate from feet
+        # self.floor_y = j[10:12, 1].min().item() # get min y-coordinate from feet
+        self.floor_y = j[10:12, 1].min() # get min y-coordinate from feet
         # variable
         self.rnn_state = None
         self.imu = None
-        self.current_root_y = 0
+        self.current_root_y = torch.tensor(0.0)
         self.last_lfoot_pos, self.last_rfoot_pos = self.feet_pos
         self.last_root_pos = torch.zeros(3)
         self.reset()
@@ -113,7 +114,8 @@ class TransPoseNet(torch.nn.Module):
         """
         self.rnn_state = None
         self.imu = None
-        self.current_root_y = 0
+        # self.current_root_y = 0
+        self.current_root_y = torch.tensor(0.0)
         self.last_lfoot_pos, self.last_rfoot_pos = self.feet_pos
         self.last_root_pos = torch.zeros(3)
     
@@ -176,34 +178,48 @@ class TransPoseNet(torch.nn.Module):
         lfoot_pos, rfoot_pos = art.math.forward_kinematics(pose[joint_set.lower_body].unsqueeze(0),
                                                            self.lower_body_bone.unsqueeze(0),
                                                            joint_set.lower_body_parent)[1][0, 7:9]
-        
-        
-        indices = torch.tensor([7, 8])  # 7:9에 해당하는 인덱스
-        forward_kinematics_result = art.math.forward_kinematics(pose[joint_set.lower_body].unsqueeze(0),
-                                                           self.lower_body_bone.unsqueeze(0),
-                                                           joint_set.lower_body_parent)[1]
-        selected = torch.index_select(forward_kinematics_result[0], dim=0, index=indices)
-        lfoot_pos, rfoot_pos = selected[0], selected[1]
-
+        # indices = torch.tensor([7, 8])  # 7:9에 해당하는 인덱스
+        # forward_kinematics_result = art.math.forward_kinematics(pose[joint_set.lower_body].unsqueeze(0),
+        #                                                    self.lower_body_bone.unsqueeze(0),
+        #                                                    joint_set.lower_body_parent)[1]
+        # selected = torch.index_select(forward_kinematics_result[0], dim=0, index=indices)
+        # lfoot_pos, rfoot_pos = selected[0], selected[1]
+        # lfoot_pos = forward_kinematics_result[0][7]
+        # rfoot_pos = forward_kinematics_result[0][8]
         
         # if contact_probability[0] > contact_probability[1]:
-        decision = (contact_probability[0] > contact_probability[1]).item()
-        if decision:
-            tran_b1_vel = self.last_lfoot_pos - lfoot_pos + self.gravity_velocity
-        else:
-            tran_b1_vel = self.last_rfoot_pos - rfoot_pos + self.gravity_velocity
+        #     tran_b1_vel = self.last_lfoot_pos - lfoot_pos + self.gravity_velocity
+        # else:
+        #     tran_b1_vel = self.last_rfoot_pos - rfoot_pos + self.gravity_velocity
+
+        foot_pos_diff = torch.where(contact_probability[0] > contact_probability[1], 
+                                    self.last_lfoot_pos - lfoot_pos,
+                                    self.last_rfoot_pos - rfoot_pos)
+        tran_b1_vel = foot_pos_diff + self.gravity_velocity
+        
         tran_b2_vel = root_rotation.mm(velocity[self.num_past_frame].cpu().view(3, 1)).view(3) / 60 * vel_scale
         weight = self._prob_to_weight(contact_probability.max())
         velocity = art.math.lerp(tran_b2_vel, tran_b1_vel, weight)
+        
         # remove penetration
         # current_foot_y = self.current_root_y + min(lfoot_pos[1].item(), rfoot_pos[1].item())
-        current_foot_y = self.current_root_y + torch.min(lfoot_pos[1], rfoot_pos[1])
-        if current_foot_y + velocity[1].item() <= self.floor_y:
-            velocity[1] = self.floor_y - current_foot_y
-        self.current_root_y += velocity[1].item()
+        # if current_foot_y + velocity[1].item() <= self.floor_y:
+        #     velocity[1] = self.floor_y - current_foot_y
+        # self.current_root_y += velocity[1].item()
+        
+        #### Implementation with Tensor not Numpy ####
+        current_foot_y = self.current_root_y + torch.minimum(lfoot_pos[1], rfoot_pos[1])
+        velocity[1] = torch.where(
+            current_foot_y + velocity[1] <= self.floor_y,
+            self.floor_y - current_foot_y,
+            velocity[1]
+        )
+        self.current_root_y = self.current_root_y + velocity[1]
+        ###############################################
+
         self.last_lfoot_pos, self.last_rfoot_pos = lfoot_pos, rfoot_pos
         self.imu = imu
-        self.last_root_pos += velocity
+        self.last_root_pos = self.last_root_pos + velocity
         return pose, self.last_root_pos.clone()
     
     @staticmethod
