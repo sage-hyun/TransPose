@@ -1,4 +1,5 @@
 [tool.poetry]
+package-mode = false
 name = "transpose"
 version = "0.1.0"
 description = ""
@@ -13,9 +14,11 @@ torch = "2.5.1"
 opencv-python = "4.10.0.84"
 pygame = "2.6.1"
 scipy = "1.11.4"
-chumpy = {path = "C:/Users/sage/SynologyDrive/dev/transpose_livestream/model/TransPose/chumpy/dist/chumpy-0.71-py3-none-any.whl"}
+chumpy = {path = "./chumpy/dist/chumpy-0.71-py3-none-any.whl"}
 onnxsim = "^0.4.36"
 numpy = "1.26.4"
+python-socketio = "^5.12.0"
+requests = "^2.32.3"
 
 
 [tool.poetry.group.dev.dependencies]

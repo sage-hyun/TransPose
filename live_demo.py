@@ -1,3 +1,8 @@
+# python 11 fix bug
+import inspect
+if not hasattr(inspect, 'getargspec'):
+    inspect.getargspec = inspect.getfullargspec
+    
 import socket
 import threading
 from articulate.math import *
@@ -180,7 +185,7 @@ if __name__ == '__main__':
     # unity_client_socket.connect(('127.0.0.1', 7004))
 
     sio = socketio.Client()
-    sio.connect('http://127.0.0.1:5555')
+    sio.connect('http://143.248.143.65:5555')
 
     # 서버로부터 이벤트를 받는 핸들러
     @sio.on('start_sending')
@@ -207,7 +212,22 @@ if __name__ == '__main__':
     get_input_thread.setDaemon(True)
     get_input_thread.start()
 
+    import onnxruntime as ort
+    # ONNX 모델 실행 준비
+    session = ort.InferenceSession("transpose_net_241226_opset17.onnx")
 
+    h_state = torch.zeros(2, 256)
+    c_state = torch.zeros(2, 256)
+    root_y = torch.tensor(0.0).view(1,1)
+    lfoot_pos = torch.tensor([ 0.1283, -0.9559,  0.0750])
+    rfoot_pos = torch.tensor([-0.1194, -0.9564,  0.0774])
+    tran = torch.zeros(3)
+    
+    h_state_2, c_state_2, root_y_2, lfoot_pos_2, rfoot_pos_2, tran_2 = h_state, c_state, root_y, lfoot_pos, rfoot_pos, tran
+    h_state, c_state, root_y, lfoot_pos, rfoot_pos, tran = h_state.numpy(), c_state.numpy(), root_y.numpy(), lfoot_pos.numpy(), rfoot_pos.numpy(), tran.numpy()
+    
+    pose_1 = None
+    tran_1 = None
 
     while True:
         while running:
@@ -232,9 +252,42 @@ if __name__ == '__main__':
             print(f"{ori.shape=}")
 
             # data_nn = torch.cat((acc.view(-1, 6*3), ori.view(-1, 6*9)), dim=1).to(device)
-            data_nn = normalize_and_concat(acc, ori).to(device)
-            pose, tran = inertial_poser.forward_online(data_nn)
-            pose = rotation_matrix_to_axis_angle(pose.view(1, 216)).view(72)
+            
+            # data_nn = normalize_and_concat(acc, ori).to(device)
+            # pose, tran = inertial_poser.forward_online(data_nn)
+            # pose = rotation_matrix_to_axis_angle(pose.view(1, 216)).view(72)
+
+            # pose, tran, h_state, c_state, root_y, lfoot_pos, rfoot_pos = inertial_poser.forward(acc, ori, 
+            #                                     h_state,
+            #                                     c_state,
+            #                                     root_y,
+            #                                     lfoot_pos,
+            #                                     rfoot_pos,
+            #                                     tran)
+            pose_2, tran_2, h_state_2, c_state_2, root_y_2, lfoot_pos_2, rfoot_pos_2 = inertial_poser.forward(acc, ori, 
+                                                h_state_2,
+                                                c_state_2,
+                                                root_y_2,
+                                                lfoot_pos_2,
+                                                rfoot_pos_2,
+                                                tran_2)
+            
+            input_feed = {
+                "acc": acc.view(1,18).numpy(),
+                "ori": ori.view(1,54).numpy(),
+                "h_state": h_state,
+                "c_state": c_state,
+                "current_root_y": root_y,
+                "last_lfoot_pos": lfoot_pos,
+                "last_rfoot_pos": rfoot_pos,
+                "last_tran": tran,
+            }
+            pose, tran, h_state, c_state, root_y, lfoot_pos, rfoot_pos = session.run(["pose", "tran", "h", "c", "root_y", "lfoot_pos", "rfoot_pos"], input_feed)
+
+            print(lfoot_pos, lfoot_pos_2)
+            print(rfoot_pos, rfoot_pos_2)
+            # if tran_1 is None:
+            #     tran_1 = tran
 
             # # recording
             # if not is_recording and start_recording:
