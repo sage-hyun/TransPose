@@ -232,14 +232,15 @@ class TransPoseNet(torch.nn.Module):
         return torch.stack([velocity[:i+1].sum(dim=0) for i in range(velocity.shape[0])])
 
 
-    def forward(self, acc, ori):
+    def forward(self, acc, ori, h_state, c_state, current_root_y, last_lfoot_pos, last_rfoot_pos, last_tran):
+        self.rnn_state = (h_state, c_state)
+        self.current_root_y = current_root_y
+        self.last_lfoot_pos = last_lfoot_pos
+        self.last_rfoot_pos = last_rfoot_pos
+        self.last_root_pos = last_tran
+        
         data_nn = normalize_and_concat(acc, ori)
         pose, tran = self.forward_online(data_nn)
         pose = rotation_matrix_to_axis_angle(pose.view(1, 216)).view(72)
         
-        return pose, tran
-    
-    # def forward(self, imu):
-    #     pose, tran = self.forward_online(imu)
-        
-    #     return pose, tran
+        return pose, tran, self.rnn_state[0], self.rnn_state[1], self.current_root_y.view(1,1), self.last_lfoot_pos, self.last_rfoot_pos
