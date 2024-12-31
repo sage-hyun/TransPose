@@ -167,7 +167,13 @@ class TransPoseNet(torch.nn.Module):
         :param x: A tensor in shape [input_dim(6 * 3 + 6 * 9)].
         :return: Pose tensor in shape [24, 3, 3] and translation tensor in shape [3].
         """
-        imu = x.repeat(self.num_total_frame, 1) if self.imu is None else torch.cat((self.imu[1:], x.view(1, -1)))
+
+        # imu = x.repeat(self.num_total_frame, 1) if self.imu is None else torch.cat((self.imu[1:], x.view(1, -1)))
+        imu = torch.where(torch.all(self.imu == 0), # check if all values ar zero
+                        x.repeat(self.num_total_frame, 1), # initial: duplicate values (26x)
+                        torch.cat((self.imu[1:], x.view(1, -1))) # sliding window
+        )
+        
         _, _, global_reduced_pose, contact_probability, velocity, self.rnn_state = self.forward_rnn(imu, self.rnn_state)
         contact_probability = contact_probability[self.num_past_frame].sigmoid().view(-1).cpu()
         # calculate pose (local joint rotation matrices)
@@ -232,15 +238,16 @@ class TransPoseNet(torch.nn.Module):
         return torch.stack([velocity[:i+1].sum(dim=0) for i in range(velocity.shape[0])])
 
 
-    def forward(self, acc, ori, h_state, c_state, current_root_y, last_lfoot_pos, last_rfoot_pos, last_tran):
+    def forward(self, acc, ori, tran, past_frames, h_state, c_state, root_y, lfoot_pos, rfoot_pos):
+        self.imu = past_frames
         self.rnn_state = (h_state, c_state)
-        self.current_root_y = current_root_y
-        self.last_lfoot_pos = last_lfoot_pos
-        self.last_rfoot_pos = last_rfoot_pos
-        self.last_root_pos = last_tran
+        self.current_root_y = root_y
+        self.last_lfoot_pos = lfoot_pos
+        self.last_rfoot_pos = rfoot_pos
+        self.last_root_pos = tran
         
         data_nn = normalize_and_concat(acc, ori)
         pose, tran = self.forward_online(data_nn)
         pose = rotation_matrix_to_axis_angle(pose.view(1, 216)).view(72)
         
-        return pose, tran, self.rnn_state[0], self.rnn_state[1], self.current_root_y.view(1,1), self.last_lfoot_pos, self.last_rfoot_pos
+        return pose, tran, self.imu, self.rnn_state[0], self.rnn_state[1], self.current_root_y.view(1,1), self.last_lfoot_pos, self.last_rfoot_pos
